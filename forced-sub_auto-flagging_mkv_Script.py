@@ -3,6 +3,27 @@ import subprocess
 import logging
 from datetime import datetime
 import json
+import configparser
+
+def load_config():
+    """Load configuration from .config file"""
+    config = configparser.ConfigParser()
+    
+    # Get the directory of the script
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    config_path = os.path.join(script_dir, '.config')
+    
+    # Check if config file exists, if not create with defaults
+    if not os.path.exists(config_path):
+        config['Paths'] = {
+            'mkv_folder': '/Volumes/Lager/mkv_test'
+        }
+        with open(config_path, 'w') as configfile:
+            config.write(configfile)
+    else:
+        config.read(config_path)
+    
+    return config
 
 def setup_logging(folder_path):
     log_file = os.path.join(folder_path, f'mkv_analysis_{datetime.now().strftime("%Y%m%d_%H%M%S")}.log')
@@ -87,8 +108,8 @@ def parse_mkvinfo_output(mkvinfo_output):
                     # Example: "Track number: 45 (track ID for mkvmerge & mkvextract: 33)"
                     logging.info(f"Processing track number line: {line}")
                     parts = line.split('(')
-                    track_num = parts[0].split(':')[1].strip()  # Dies entspricht der MediaInfo ID
-                    mkvmerge_id = parts[1].split(':')[1].split(')')[0].strip()  # Dies ist die ID, die wir für mkvpropedit brauchen
+                    track_num = parts[0].split(':')[1].strip()  # This corresponds to the MediaInfo ID
+                    mkvmerge_id = parts[1].split(':')[1].split(')')[0].strip()  # This is the ID needed for mkvpropedit
                     current_track['number'] = track_num
                     current_track['mkvmerge_id'] = mkvmerge_id
                     logging.info(f"Extracted: MediaInfo/Track number {track_num}, MKVMerge ID {mkvmerge_id}")
@@ -241,7 +262,8 @@ def analyze_and_fix_mkv_files(folder_path):
             logging.error(f"Error processing {mkv_file}: {str(e)}")
 
 if __name__ == "__main__":
-    FOLDER_PATH = "/Volumes/Lager/mkv_test"
+    config = load_config()
+    FOLDER_PATH = config['Paths']['mkv_folder']
     
     try:
         analyze_and_fix_mkv_files(FOLDER_PATH)

@@ -1,0 +1,6 @@
+# Example configuration file for MKV Forced Subtitle Auto-Flagging Script
+# Copy this file as '.config' and adjust the path
+
+[Paths]
+# Path to the folder containing your MKV files
+mkv_folder = /your/path/to/mkv/files
