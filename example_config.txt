@@ -1,6 +1,11 @@
 # Example configuration file for MKV Forced Subtitle Auto-Flagging Script
-# Copy this file as '.config' and adjust the path
+# Copy this file as '.config' and adjust the settings
 
 [Paths]
 # Path to the folder containing your MKV files
 mkv_folder = /your/path/to/mkv/files
+
+[Logging]
+# Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+# Use DEBUG to see all details
+level = INFO 

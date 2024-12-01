@@ -18,6 +18,9 @@ def load_config():
         config['Paths'] = {
             'mkv_folder': '/Volumes/Lager/mkv_test'
         }
+        config['Logging'] = {
+            'level': 'INFO'  # Default logging level
+        }
         with open(config_path, 'w') as configfile:
             config.write(configfile)
     else:
@@ -25,10 +28,15 @@ def load_config():
     
     return config
 
-def setup_logging(folder_path):
+def setup_logging(folder_path, log_level='INFO'):
+    """Setup logging with configurable level"""
     log_file = os.path.join(folder_path, f'mkv_analysis_{datetime.now().strftime("%Y%m%d_%H%M%S")}.log')
+    
+    # Convert string level to logging constant
+    numeric_level = getattr(logging, log_level.upper(), logging.INFO)
+    
     logging.basicConfig(
-        level=logging.INFO,
+        level=numeric_level,
         format='%(asctime)s - %(levelname)s - %(message)s',
         handlers=[
             logging.FileHandler(log_file),
@@ -100,31 +108,31 @@ def parse_mkvinfo_output(mkvinfo_output):
         
         if '| + Track' in line:
             current_track = {}
-            logging.info(f"Found new track: {line}")
+            logging.debug(f"Found new track: {line}")
         elif current_track is not None:
             if 'Track number:' in line:
                 try:
                     # Extract both track number and mkvmerge ID
                     # Example: "Track number: 45 (track ID for mkvmerge & mkvextract: 33)"
-                    logging.info(f"Processing track number line: {line}")
+                    logging.debug(f"Processing track number line: {line}")
                     parts = line.split('(')
                     track_num = parts[0].split(':')[1].strip()  # This corresponds to the MediaInfo ID
                     mkvmerge_id = parts[1].split(':')[1].split(')')[0].strip()  # This is the ID needed for mkvpropedit
                     current_track['number'] = track_num
                     current_track['mkvmerge_id'] = mkvmerge_id
-                    logging.info(f"Extracted: MediaInfo/Track number {track_num}, MKVMerge ID {mkvmerge_id}")
+                    logging.debug(f"Extracted: MediaInfo/Track number {track_num}, MKVMerge ID {mkvmerge_id}")
                 except Exception as e:
                     logging.error(f"Error parsing track numbers: {str(e)}")
             elif 'Track type:' in line and 'subtitles' in line.lower():
                 if 'number' in current_track:
                     # Wir speichern die Track-Nummer als Key (entspricht MediaInfo ID)
                     track_mapping[current_track['number']] = current_track['mkvmerge_id']
-                    logging.info(f"Added mapping: MediaInfo ID {current_track['number']} -> MKVMerge ID {current_track['mkvmerge_id']}")
+                    logging.debug(f"Added mapping: MediaInfo ID {current_track['number']} -> MKVMerge ID {current_track['mkvmerge_id']}")
                 current_track = None
             elif 'Track type:' in line:
                 current_track = None
     
-    logging.info(f"Final track mapping: {track_mapping}")
+    logging.debug(f"Final track mapping: {track_mapping}")
     return track_mapping
 
 def set_forced_flag(file_path, track_id, forced=True):
@@ -145,11 +153,11 @@ def set_forced_flag(file_path, track_id, forced=True):
         logging.error(f"Failed to set forced flag: {str(e)}")
         return False
 
-def analyze_and_fix_mkv_files(folder_path):
+def analyze_and_fix_mkv_files(folder_path, log_level='INFO'):
     if not os.path.exists(folder_path):
         raise ValueError(f"The specified folder path does not exist: {folder_path}")
     
-    log_file = setup_logging(folder_path)
+    log_file = setup_logging(folder_path, log_level)
     logging.info(f"Starting MKV analysis for folder: {folder_path}")
     
     mkv_files = [f for f in os.listdir(folder_path) if f.lower().endswith('.mkv')]
@@ -177,77 +185,72 @@ def analyze_and_fix_mkv_files(folder_path):
                 mediainfo_data = json.loads(mediainfo_result.stdout)
                 track_mapping = parse_mkvinfo_output(mkvinfo_result.stdout)
                 
-                # Debug output for track mapping
-                logging.info("\nTrack ID Mapping Debug:")
-                logging.info("MKVInfo track mapping:")
-                logging.info(f"{track_mapping}")
+                logging.debug("\nTrack ID Mapping Debug:")
+                logging.debug("MKVInfo track mapping:")
+                logging.debug(f"{track_mapping}")
                 
                 subtitle_tracks = analyze_subtitle_tracks(mediainfo_data)
                 
-                # Debug output for subtitle track IDs
-                logging.info("\nMediaInfo subtitle track IDs:")
+                logging.debug("\nMediaInfo subtitle track IDs:")
                 subtitle_ids = [track['id'] for track in subtitle_tracks]
-                logging.info(f"{subtitle_ids}")
+                logging.debug(f"{subtitle_ids}")
                 
                 # Neue Debug-Ausgabe für alle ID-Tripel
-                logging.info("\nID Triplets (MediaInfo ID, MKVInfo Track Number, MKVInfo Track ID for mkvmerge):")
+                logging.debug("\nID Triplets (MediaInfo ID, MKVInfo Track Number, MKVInfo Track ID for mkvmerge):")
                 for track in subtitle_tracks:
                     mediainfo_id = track['id']
                     mkvinfo_track_num = mediainfo_id  # Diese sind identisch
                     mkvmerge_id = track_mapping.get(mediainfo_id, "not found")
-                    logging.info(f"  Track: ({mediainfo_id}, {mkvinfo_track_num}, {mkvmerge_id})")
+                    logging.debug(f"  Track: ({mediainfo_id}, {mkvinfo_track_num}, {mkvmerge_id})")
                 
                 if subtitle_tracks:
-                    logging.info(f"\nFound {len(subtitle_tracks)} subtitle tracks:")
+                    logging.debug(f"\nFound {len(subtitle_tracks)} subtitle tracks:")
                     tracks_to_force = []
                     
-                    # First, analyze all tracks
                     for track in subtitle_tracks:
                         element_info = (f"{track['element_count']} elements "
                                       f"({track.get('percentage', 0):.1f}% of max for {track['language']})")
                         
-                        logging.info(f"\n  Track ID {track['id']}:")
-                        logging.info(f"    Format: {track['format']}")
-                        logging.info(f"    Language: {track['language']}")
-                        logging.info(f"    Current forced flag: {track['forced']}")
-                        logging.info(f"    Default: {track['default']}")
-                        logging.info(f"    Elements: {element_info}")
-                        logging.info(f"    Needs to be flagged as forced: {track['should_be_forced']}")
+                        logging.debug(f"\n  Track ID {track['id']}:")
+                        logging.debug(f"    Format: {track['format']}")
+                        logging.debug(f"    Language: {track['language']}")
+                        logging.debug(f"    Current forced flag: {track['forced']}")
+                        logging.debug(f"    Default: {track['default']}")
+                        logging.debug(f"    Elements: {element_info}")
+                        logging.debug(f"    Needs to be flagged as forced: {track['should_be_forced']}")
                         
                         if track['should_be_forced']:
                             tracks_to_force.append(track)
                     
-                    # Then, summarize changes
                     if tracks_to_force:
-                        logging.info(f"\nWill modify {len(tracks_to_force)} tracks in {mkv_file}:")
+                        logging.debug(f"\nWill modify {len(tracks_to_force)} tracks in {mkv_file}:")
                         for track in tracks_to_force:
-                            logging.info(f"  - Track {track['id']} ({track['language']}): "
+                            logging.debug(f"  - Track {track['id']} ({track['language']}): "
                                        f"{track['element_count']} elements")
                         
-                        # Apply changes
                         for track in tracks_to_force:
                             mkvmerge_id = track_mapping.get(track['id'])
                             if mkvmerge_id:
-                                logging.info(f"\n  Setting forced flag for track {track['id']}:")
-                                logging.info(f"    MKVMerge ID: {mkvmerge_id}")
-                                logging.info(f"    Language: {track['language']}")
-                                logging.info(f"    Elements: {track['element_count']}")
+                                logging.debug(f"\n  Setting forced flag for track {track['id']}:")
+                                logging.debug(f"    MKVMerge ID: {mkvmerge_id}")
+                                logging.debug(f"    Language: {track['language']}")
+                                logging.debug(f"    Elements: {track['element_count']}")
                                 
                                 success = set_forced_flag(full_path, mkvmerge_id)
-                                track['modified'] = success  # Track the modification status
+                                track['modified'] = success
                                 
                                 if success:
-                                    logging.info(f"    ✓ Successfully set forced flag")
+                                    logging.debug(f"    ✓ Successfully set forced flag")
                                 else:
                                     logging.error(f"    ✗ Failed to set forced flag")
                             else:
                                 logging.error(f"    ✗ Could not find mkvmerge ID for track {track['id']}")
                                 track['modified'] = False
                     else:
-                        logging.info("\nNo tracks need to be modified in this file")
+                        logging.debug("\nNo tracks need to be modified in this file")
                     
                     # Final verification
-                    logging.info("\nFinal track status:")
+                    logging.info("\nFinal track status verification:")
                     for track in tracks_to_force:
                         logging.info(f"  Track {track['id']} ({track['language']}):")
                         logging.info(f"    Original forced flag: {track['forced']}")
@@ -264,9 +267,10 @@ def analyze_and_fix_mkv_files(folder_path):
 if __name__ == "__main__":
     config = load_config()
     FOLDER_PATH = config['Paths']['mkv_folder']
+    LOG_LEVEL = config['Logging'].get('level', 'INFO')
     
     try:
-        analyze_and_fix_mkv_files(FOLDER_PATH)
+        analyze_and_fix_mkv_files(FOLDER_PATH, LOG_LEVEL)
         logging.info("Analysis and fixes completed successfully")
     except Exception as e:
         logging.error(f"Script failed: {str(e)}")
