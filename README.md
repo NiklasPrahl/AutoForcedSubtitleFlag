@@ -6,7 +6,10 @@ NOTE: The matching of subtitle tracks is not tested against all existing subtitl
 
 ## Usage 
 
-Just run the script with the path to the folder containing your MKV files.
+Download the script and run it with the path to the folder containing your MKV files.
+
+The path needs to be set in the .config file. See example_config.txt for reference.
+
 
 ## How it Works
 
